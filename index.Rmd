@@ -1,0 +1,230 @@
+---
+title: "My Personal Corona Tracker"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+  
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(magrittr)
+library(igraph)
+library(stringr)
+library(RColorBrewer)
+library(visNetwork)
+library(usmap)
+library(plotly)
+library(curl)
+library(ggmap)
+
+###load in Data###
+
+#for network graph
+edges <- read.csv('~/Desktop/network_graph/edges.csv')
+edges$source %<>% str_trim()
+edges$target %<>% str_trim()
+
+edges$last_date %<>% lubridate::mdy()
+edges %<>% filter (Sys.Date() - last_date <= 31)
+
+##make node graph from edges graph 
+nodes <- data.frame(nodes = unique(edges$source), id = 1:length(unique(edges$source)))
+nodes %<>% rbind(data.frame(nodes = unique(edges$target), id = 1:length(unique(edges$target))))
+
+nodes %<>% filter(!duplicated(nodes))
+
+#for county graph
+county_info <- edges$county %>% stringr::str_split(pattern = ", ") %>% unlist() %>% unique()
+counties <- usmap::us_map(regions = "counties", include= c(.mid_atlantic, .new_england)) 
+counties %<>% mutate(beenthere = ifelse(county %in% county_info, T,F))
+
+
+##
+#for daily cases
+tests_day <- read.csv( curl("https://raw.githubusercontent.com/nychealth/coronavirus-data/master/tests.csv") )
+tests_day$DATE %<>% lubridate::mdy()
+
+#for cases by zip over the last 4 week
+zip_4weeks <- read.csv( curl("https://raw.githubusercontent.com/nychealth/coronavirus-data/master/recent/recent-4-week-by-modzcta.csv") )
+nyc_map <- get_map(location = c(lon = -74.00, lat = 40.71), maptype = "terrain", zoom = 11)
+
+#zip to boro
+zip_2_boro <- read.csv('~/Desktop/network_graph/zip_borough.csv')
+
+#zip to lat long 
+gc <- read.csv('~/Desktop/network_graph/latlong.csv')
+
+
+```
+
+My Stats
+=====================================  
+
+Row {data-width=800 }
+-----------------------------------------------------------------------
+### Chart A: Network Graph
+
+```{r}
+
+g <- graph_from_data_frame(d=edges, vertices=nodes, directed=FALSE)
+
+coul  <- brewer.pal(4, "Set2") 
+
+t <- toVisNetworkData(g, idToLabel = TRUE)
+
+
+t$edges$value <- log(t$edges$weight) * .6  + 4
+t$edges$title <- paste(t$edges$weight, "day(s) last month")
+t$edges$color <- coul[as.numeric(as.factor(t$edges$vibe))]
+t$edges %<>% mutate(length = ifelse((weight == 30 | weight == 15),10,250))
+ledges <- data.frame(color = unique(coul[as.numeric(as.factor(t$edges$vibe))]),
+                     label = unique(t$edges$vibe))
+set.seed(13)
+visNetwork(nodes = t$nodes, edges = t$edges, physics = T, main = "Contacts In the Last Month") %>% 
+  visNodes(shape = 'circle',
+           color = list(background = "white", 
+                        border = "darkblue",
+                        highlight = "yellow")) %>% 
+  visLegend(addEdges = ledges,width = 0.2, position = "left", ncol = 3, stepY = 50)
+
+
+```
+
+Row {data-width=300}
+--------------------------------------
+### Total People I've Interacted with 
+```{r}
+npeople = edges %>% filter(source == 'simone' | target == 'simone') %>% summarise(n = n())
+valueBox(value = npeople,color = "orange",caption = "People I've Interacted With")
+```
+
+-----------------------------------------------------------------------
+
+### Days 
+```{r}
+days  = as.numeric(Sys.Date() - as.Date('2020-09-23'))
+valueBox(value = days,color = "lightblue", caption = "Days since last Covid Test")
+```
+
+-----------------------------------------------------------------------
+
+### Number of places I've been 
+```{r}
+countiez  = length(county_info)
+valueBox(value = countiez,color = "lightpink", caption = "Counties I've Been To")
+```
+
+
+### Chart B: Places I've Been
+
+```{r}
+
+coul_2  <- brewer.pal(2, "Pastel2") 
+# Create a vector of color
+my_color_2 <- coul_2[as.numeric(as.factor(counties$beenthere))]
+
+p <-plot_usmap(regions = 'counties', include= c(.mid_atlantic, .new_england), 
+           fill = my_color_2, alpha = .7)+ 
+  geom_point(data = counties, aes(x = x, y = y, text = county),alpha = 0) + 
+  labs(title = 'Places Ive Been')
+
+ggplotly(p, tooltip = c('text')) 
+```
+
+
+NYC Stats
+=====================================  
+Row {data-width=800 }
+-----------------------------------------------------------------------
+### Chart A: Stats by Zip
+
+```{r}
+
+formap <- zip_4weeks %>% select(MODIFIED_ZCTA,NEIGHBORHOOD_NAME,PERCENT_POSITIVE_4WEEK,COVID_CASE_COUNT_4WEEK)
+
+formap <- cbind(formap, gc)
+formap %<>% rename(percent_positive = PERCENT_POSITIVE_4WEEK, case_count = COVID_CASE_COUNT_4WEEK)
+
+t <- ggmap(nyc_map) + geom_point(
+    aes(x=lon, y=lat, colour=percent_positive, size =percent_positive,
+        text = paste(NEIGHBORHOOD_NAME, "<br>", "Case Count:", case_count,"<br>", "Percent Positive:",percent_positive)),
+    data=formap, na.rm = T,show.legend =F)  + 
+  scale_color_gradient() + 
+  labs(title = "Case Count by Zip Over the Last 4 Weeks", subtitle = 'Over the Last 4 Weeks') + 
+  theme(legend.position='none',
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        rect = element_blank(),
+        axis.title.y=element_blank(),axis.title.x=element_blank())
+
+
+t %>% ggplotly(tooltip = c('text'))
+
+```
+
+Row {data-width=400}
+---------------------------------------------------------------------
+### Chart B: Cases over Time
+
+```{r}
+#graph 1, overall case counts
+pos_day <- tests_day %>%
+  dplyr::select(DATE, PERCENT_POSITIVE_7DAYS_AVG, POSITIVE_TESTS_7DAYS_AVG) %>%
+  rename(date = DATE, positive_rate = PERCENT_POSITIVE_7DAYS_AVG, total_positive_tests = POSITIVE_TESTS_7DAYS_AVG) %>%
+  mutate(positive_rate = positive_rate*100)%>%
+  ggplot(aes(x = date,label = positive_rate)) +
+  geom_line(aes(y = total_positive_tests, color = 'red'), size = 1.2, show.legend = F) +
+  ylab("total positive tests") +
+  theme_minimal()+
+  labs(title = "Citywide Daily Case Count") +
+  theme(legend.position='none')
+
+pos_day %>%
+  ggplotly(tooltip = c("date","label"))
+```
+
+---------------------------------------------------------------------
+### Chart B: Cases by Borough
+
+```{r}
+##first get the rates per borough over the last 4 weeks
+boro_4weeks <- zip_4weeks %>% select(MODIFIED_ZCTA, NEIGHBORHOOD_NAME,PERCENT_POSITIVE_4WEEK, starts_with("COVID"))
+
+boro_4weeks %<>% rename(zip = MODIFIED_ZCTA)
+boro_4weeks %<>% left_join(., zip_2_boro, by = "zip")
+
+boro_4weeks_avg <- boro_4weeks %>% group_by(borough) %>%
+  select(-zip, -NEIGHBORHOOD_NAME,-COVID_CASE_RATE_4WEEK) %>%
+  summarise_all(sum,na.rm= T) %>%
+  reshape2::melt(id.vars = c("borough", "PERCENT_POSITIVE_4WEEK",'COVID_DEATH_COUNT_4WEEK','COVID_DEATH_RATE_4WEEK'))
+
+
+boro_4weeks_avg %<>%mutate(variable = factor(variable,levels = c("COVID_CASE_COUNT_WEEK4", "COVID_CASE_COUNT_WEEK3", "COVID_CASE_COUNT_WEEK2", "COVID_CASE_COUNT_WEEK1"))) 
+
+boro_4weeks_avg$variable <- plyr::revalue(boro_4weeks_avg$variable, c("COVID_CASE_COUNT_WEEK4"="4 weeks ago",
+                                                                      "COVID_CASE_COUNT_WEEK3"="3 weeks ago",
+                                                                      'COVID_CASE_COUNT_WEEK2' = '2 weeks ago',
+                                                                      'COVID_CASE_COUNT_WEEK1' = '1 week ago'))
+
+
+boro <- boro_4weeks_avg %>%
+  filter(variable != "COVID_CASE_COUNT_4WEEK") %>%
+  filter(!is.na(borough)) %>%
+  filter(!grepl("COVID_CASE_RATE",variable)) %>%
+  rename(number_of_cases = value) %>% 
+  ggplot(aes(x = variable)) +
+  geom_line(aes(y = number_of_cases, group = borough, color = borough), size = 1.2) +
+  theme(axis.text.x=element_text(angle=45,hjust=1)) +
+  xlab('week') +
+  ylab('number of cases') + 
+  labs(title = "Borough Case Count") +
+  theme_minimal()
+
+boro %>% ggplotly(tooltip = c('number_of_cases'))
+
+```
+

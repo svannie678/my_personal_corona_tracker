@@ -1,0 +1,24 @@
+{
+    "id": "C3600162",
+    "path": "~/Desktop/corona_tracker/index.Rmd",
+    "project_path": "index.Rmd",
+    "type": "r_markdown",
+    "hash": "254839567",
+    "contents": "",
+    "dirty": false,
+    "created": 1602709347821.0,
+    "source_on_save": false,
+    "relative_order": 2,
+    "properties": {
+        "cursorPosition": "5,16",
+        "scrollLine": "61"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1602711193,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1602711193698,
+    "read_only": false,
+    "read_only_alternatives": []
+}

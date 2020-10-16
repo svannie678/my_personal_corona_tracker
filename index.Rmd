@@ -24,12 +24,19 @@ library(ggmap)
 ###load in Data###
 
 #for network graph
-edges <- read.csv('~/Desktop/network_graph/edges.csv')
+cal <- read.csv('~/Desktop/corona_tracker/data/calendar.csv')
+edges <- cal %>%  reshape2::melt(id.vars  = c("source","target","vibe","county","weight"), value.name = "date")
+edges %<>% filter(!is.na(date)) %>% filter(date != '')
 edges$source %<>% str_trim()
 edges$target %<>% str_trim()
+edges$date %<>% lubridate::mdy()
+edges %<>% select(-variable) %>% group_by(target) %>% 
+  mutate(weight = ifelse(is.na(weight), n(),weight)) %>% 
+  filter(date == max(date)) %>% ungroup() 
 
-edges$last_date %<>% lubridate::mdy()
-edges %<>% filter (Sys.Date() - last_date <= 31)
+edges <- edges[!duplicated(edges),]
+edges %<>% filter (Sys.Date() - date <= 31)
+
 
 ##make node graph from edges graph 
 nodes <- data.frame(nodes = unique(edges$source), id = 1:length(unique(edges$source)))
@@ -53,10 +60,10 @@ zip_4weeks <- read.csv( curl("https://raw.githubusercontent.com/nychealth/corona
 nyc_map <- get_map(location = c(lon = -74.00, lat = 40.71), maptype = "terrain", zoom = 11)
 
 #zip to boro
-zip_2_boro <- read.csv('~/Desktop/network_graph/zip_borough.csv')
+zip_2_boro <- read.csv('~/Desktop/corona_tracker/data/zip_borough.csv')
 
 #zip to lat long 
-gc <- read.csv('~/Desktop/network_graph/latlong.csv')
+gc <- read.csv('~/Desktop/corona_tracker/data/latlong.csv')
 
 
 ```

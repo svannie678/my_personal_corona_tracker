@@ -30,7 +30,7 @@ edges %<>% filter(!is.na(date)) %>% filter(date != '')
 edges$source %<>% str_trim()
 edges$target %<>% str_trim()
 edges$date %<>% lubridate::mdy()
-edges %<>% select(-variable) %>% group_by(target) %>% 
+edges %<>% select(-variable) %>% group_by(source,target) %>% 
   mutate(weight = ifelse(is.na(weight), n(),weight)) %>% 
   filter(date == max(date)) %>% ungroup() 
 
@@ -41,7 +41,6 @@ edges %<>% filter (Sys.Date() - date <= 31)
 ##make node graph from edges graph 
 nodes <- data.frame(nodes = unique(edges$source), id = 1:length(unique(edges$source)))
 nodes %<>% rbind(data.frame(nodes = unique(edges$target), id = 1:length(unique(edges$target))))
-
 nodes %<>% filter(!duplicated(nodes))
 
 #for county graph

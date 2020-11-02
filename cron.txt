@@ -94,7 +94,7 @@ The following object is masked from 'package:magrittr':
 
     inset
 
-Quitting from lines 12-69 (index.rmd) 
+Quitting from lines 12-68 (index.rmd) 
 Error: id variables not found in data: source
 
 Execution halted

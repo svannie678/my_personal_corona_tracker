@@ -41,7 +41,7 @@ edges %<>% filter (Sys.Date() - date <= 31)
 ##make node graph from edges graph 
 nodes <- data.frame(nodes = unique(edges$source), id = 1:length(unique(edges$source)))
 nodes %<>% rbind(data.frame(nodes = unique(edges$target), id = 1:length(unique(edges$target))))
-nodes %<>% filter(!duplicated(nodes))
+ nodes %<>% filter(!duplicated(nodes))
 
 #for county graph
 county_info <- edges$county %>% stringr::str_split(pattern = ", ") %>% unlist() %>% unique()
@@ -51,7 +51,7 @@ counties %<>% mutate(beenthere = ifelse(county %in% county_info, T,F))
 
 ##
 #for daily cases
-tests_day <- read.csv( curl("https://raw.githubusercontent.com/nychealth/coronavirus-data/master/tests.csv") )
+tests_day <- read.csv( curl("https://raw.githubusercontent.com/nychealth/coronavirus-data/master/trends/tests.csv") )
 tests_day$DATE %<>% lubridate::mdy()
 
 #for cases by zip over the last 4 week

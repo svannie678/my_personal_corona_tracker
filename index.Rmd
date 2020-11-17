@@ -50,12 +50,8 @@ counties %<>% mutate(beenthere = ifelse(county %in% county_info, T,F))
 
 
 ##
-#for daily cases
-tests_day <- read.csv( curl("https://raw.githubusercontent.com/nychealth/coronavirus-data/master/trends/tests.csv") )
-tests_day$DATE %<>% lubridate::mdy()
 
-#for cases by zip over the last 4 week
-zip_4weeks <- read.csv( curl("https://raw.githubusercontent.com/nychealth/coronavirus-data/master/recent/recent-4-week-by-modzcta.csv") )
+#nyc static info
 nyc_map <- get_map(location = c(lon = -74.00, lat = 40.71), maptype = "terrain", zoom = 11)
 
 #zip to boro
@@ -64,7 +60,36 @@ zip_2_boro <- read.csv('~/Desktop/corona_tracker/data/zip_borough.csv')
 #zip to lat long 
 gc <- read.csv('~/Desktop/corona_tracker/data/latlong.csv')
 
+#for daily cases
+tests_day <- read.csv(curl("https://raw.githubusercontent.com/nychealth/coronavirus-data/master/trends/tests.csv") )
+tests_day$DATE %<>% lubridate::mdy()
 
+### last 7 days info
+neighborhoodinfo <- read.csv(curl("https://raw.githubusercontent.com/nychealth/coronavirus-data/master/latest/last7days-by-modzcta.csv"))
+
+#positive by zip since august 
+zip_perc_positive <- read.csv(curl("https://raw.githubusercontent.com/nychealth/coronavirus-data/master/trends/percentpositive-by-modzcta.csv") )
+zip_perc_positive %<>% select(week_ending,matches('PCTPOS_1'))
+zip_perc_positive %<>% reshape2::melt(id.vars = "week_ending", variable.name = "zip",value.name = "percent_positive")
+zip_perc_positive$zip %<>% str_remove("PCTPOS_")
+ 
+#case rates by zip since august
+zip_case_rates <- read.csv(curl("https://raw.githubusercontent.com/nychealth/coronavirus-data/master/trends/caserate-by-modzcta.csv") )
+zip_case_rates %<>% select(week_ending,matches('CASERATE_1'))
+zip_case_rates %<>% reshape2::melt(id.vars = "week_ending", variable.name = "zip",value.name = "case_rate")
+zip_case_rates$zip %<>% str_remove("CASERATE_")
+
+zip_info <- inner_join(zip_case_rates,zip_perc_positive)
+zip_info$zip %<>% as.integer()
+
+boro <-  zip_info %>% left_join(., zip_2_boro, by = "zip")
+
+boro %<>% group_by(borough, week_ending) %>%
+  select(-zip) %>%
+  summarise_all(mean,na.rm= T) 
+
+boro$week_ending %<>% as.Date(tryFormats = c("%m/%d/%Y"))
+ 
 ```
 
 My Stats
@@ -112,7 +137,7 @@ valueBox(value = npeople,color = "orange",caption = "People I've Interacted With
 
 ### Days 
 ```{r}
-days  = as.numeric(Sys.Date() - as.Date('2020-10-23'))
+days  = as.numeric(Sys.Date() - as.Date('2020-11-12'))
 valueBox(value = days,color = "lightblue", caption = "Days since last Covid Test")
 ```
 
@@ -150,17 +175,15 @@ Row {data-width=800 }
 
 ```{r}
 
-formap <- zip_4weeks %>% select(MODIFIED_ZCTA,NEIGHBORHOOD_NAME,PERCENT_POSITIVE_4WEEK,COVID_CASE_COUNT_4WEEK)
-
-formap <- cbind(formap, gc)
-formap %<>% rename(percent_positive = PERCENT_POSITIVE_4WEEK, case_count = COVID_CASE_COUNT_4WEEK)
+formap <- cbind(neighborhoodinfo, gc)
+formap %<>% rename(percent_positive = percentpositivity_7day)
 
 t <- ggmap(nyc_map) + geom_point(
-    aes(x=lon, y=lat, colour=percent_positive, size =percent_positive,
-        text = paste(NEIGHBORHOOD_NAME, "<br>", "Case Count:", case_count,"<br>", "Percent Positive:",percent_positive)),
-    data=formap, na.rm = T,show.legend =F)  + 
+  aes(x=lon, y=lat, colour=percent_positive, size = percent_positive,
+      text = paste(modzcta_name, "<br>", "Percent Positive:",percent_positive,"<br>", "Case Count:", people_positive,"<br>", "People Tested:",people_tested)),
+  data=formap, na.rm = T,show.legend =F)  + 
   scale_color_gradient() + 
-  labs(title = "Case Count by Zip Over the Last 4 Weeks", subtitle = 'Over the Last 4 Weeks') + 
+  labs(title = paste0("Case Count by Zip: ", unique(formap$daterange)))+ 
   theme(legend.position='none',
         axis.text.x = element_blank(),
         axis.text.y = element_blank(),
@@ -178,60 +201,40 @@ Row {data-width=400}
 ### Chart B: Cases over Time
 
 ```{r}
-#graph 1, overall case counts
+
 pos_day <- tests_day %>%
   dplyr::select(DATE, PERCENT_POSITIVE_7DAYS_AVG, POSITIVE_TESTS_7DAYS_AVG) %>%
   rename(date = DATE, positive_rate = PERCENT_POSITIVE_7DAYS_AVG, total_positive_tests = POSITIVE_TESTS_7DAYS_AVG) %>%
-  mutate(positive_rate = positive_rate*100)%>%
-  ggplot(aes(x = date,label = positive_rate)) +
+  mutate(positive_rate = positive_rate*100) %>%
+  ggplot(aes(x = date,label=positive_rate)) +
   geom_line(aes(y = total_positive_tests, color = 'red'), size = 1.2, show.legend = F) +
   ylab("total positive tests") +
   theme_minimal()+
   labs(title = "Citywide Daily Case Count") +
   theme(legend.position='none')
 
+
 pos_day %>%
-  ggplotly(tooltip = c("date","label"))
+  ggplotly(tooltip = c("date","label","y"))
 ```
 
 ---------------------------------------------------------------------
 ### Chart B: Cases by Borough
 
 ```{r}
-##first get the rates per borough over the last 4 weeks
-boro_4weeks <- zip_4weeks %>% select(MODIFIED_ZCTA, NEIGHBORHOOD_NAME,PERCENT_POSITIVE_4WEEK, starts_with("COVID"))
-
-boro_4weeks %<>% rename(zip = MODIFIED_ZCTA)
-boro_4weeks %<>% left_join(., zip_2_boro, by = "zip")
-
-boro_4weeks_avg <- boro_4weeks %>% group_by(borough) %>%
-  select(-zip, -NEIGHBORHOOD_NAME,-COVID_CASE_RATE_4WEEK) %>%
-  summarise_all(sum,na.rm= T) %>%
-  reshape2::melt(id.vars = c("borough", "PERCENT_POSITIVE_4WEEK",'COVID_DEATH_COUNT_4WEEK','COVID_DEATH_RATE_4WEEK'))
-
-
-boro_4weeks_avg %<>%mutate(variable = factor(variable,levels = c("COVID_CASE_COUNT_WEEK4", "COVID_CASE_COUNT_WEEK3", "COVID_CASE_COUNT_WEEK2", "COVID_CASE_COUNT_WEEK1"))) 
-
-boro_4weeks_avg$variable <- plyr::revalue(boro_4weeks_avg$variable, c("COVID_CASE_COUNT_WEEK4"="4 weeks ago",
-                                                                      "COVID_CASE_COUNT_WEEK3"="3 weeks ago",
-                                                                      'COVID_CASE_COUNT_WEEK2' = '2 weeks ago',
-                                                                      'COVID_CASE_COUNT_WEEK1' = '1 week ago'))
-
-
-boro <- boro_4weeks_avg %>%
-  filter(variable != "COVID_CASE_COUNT_4WEEK") %>%
+boro_g <- boro %>%
   filter(!is.na(borough)) %>%
-  filter(!grepl("COVID_CASE_RATE",variable)) %>%
-  rename(number_of_cases = value) %>% 
-  ggplot(aes(x = variable)) +
-  geom_line(aes(y = number_of_cases, group = borough, color = borough), size = 1.2) +
-  theme(axis.text.x=element_text(angle=45,hjust=1)) +
-  xlab('week') +
-  ylab('number of cases') + 
-  labs(title = "Borough Case Count") +
+  ggplot(aes(x = week_ending,text = 
+               paste(week_ending, "<br>","Percent Positive:",round(percent_positive,2),"<br>", "Case Count per 100K:", round(case_rate,2)))) +
+  geom_line(aes(y = round(percent_positive,2), group = borough, color = borough), size = 1.2) +
+  theme(axis.text.x=element_text(angle=90,hjust=1)) +
+  xlab('month') +
+  ylab('percent positive') + 
+  labs(title = "Percent Positive by Borough") +
   theme_minimal()
 
-boro %>% ggplotly(tooltip = c('number_of_cases'))
+
+boro_g %>% ggplotly(tooltip = c('text'))
 
 ```
 

@@ -30,12 +30,12 @@ edges %<>% filter(!is.na(date)) %>% filter(date != '')
 edges$source %<>% str_trim()
 edges$target %<>% str_trim()
 edges$date %<>% lubridate::mdy()
+edges %<>% filter (Sys.Date() - date <= 31)
 edges %<>% select(-variable) %>% group_by(source,target) %>% 
   mutate(weight = ifelse(is.na(weight), n(),weight)) %>% 
   filter(date == max(date)) %>% ungroup() 
 
 edges <- edges[!duplicated(edges),]
-edges %<>% filter (Sys.Date() - date <= 31)
 
 
 ##make node graph from edges graph 

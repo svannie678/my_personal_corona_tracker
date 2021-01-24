@@ -30,7 +30,7 @@ edges %<>% filter(!is.na(date)) %>% filter(date != '')
 edges$source %<>% str_trim()
 edges$target %<>% str_trim()
 edges$date %<>% lubridate::mdy()
-edges %<>% filter (Sys.Date() - date <= 31)
+edges %<>% filter (Sys.Date() - date <= 15)
 edges %<>% select(-variable) %>% group_by(source,target) %>% 
   mutate(weight = ifelse(is.na(weight), n(),weight)) %>% 
   filter(date == max(date)) %>% ungroup() 
@@ -109,13 +109,13 @@ t <- toVisNetworkData(g, idToLabel = TRUE)
 
 
 t$edges$value <- log(t$edges$weight) * .6  + 4
-t$edges$title <- paste(t$edges$weight, "day(s) last month")
+t$edges$title <- paste(t$edges$weight, "day(s) last 2 weeks")
 t$edges$color <- coul[as.numeric(as.factor(t$edges$vibe))]
 t$edges %<>% mutate(length = ifelse((weight == 30 | weight == 15),10,250))
 ledges <- data.frame(color = unique(coul[as.numeric(as.factor(t$edges$vibe))]),
                      label = unique(t$edges$vibe))
 set.seed(13)
-visNetwork(nodes = t$nodes, edges = t$edges, physics = T, main = "Contacts In the Last Month") %>% 
+visNetwork(nodes = t$nodes, edges = t$edges, physics = T, main = "Contacts In the Last 2 weeks") %>% 
   visNodes(shape = 'circle',
            color = list(background = "white", 
                         border = "darkblue",

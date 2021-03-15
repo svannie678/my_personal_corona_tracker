@@ -137,7 +137,7 @@ valueBox(value = npeople,color = "orange",caption = "People I've Interacted With
 
 ### Days 
 ```{r}
-days  = as.numeric(Sys.Date() - as.Date('2021-02-25'))
+days  = as.numeric(Sys.Date() - as.Date('2021-03-12'))
 valueBox(value = days,color = "lightblue", caption = "Days since last Covid Test")
 ```
 
@@ -175,6 +175,7 @@ Row {data-width=800 }
 
 ```{r}
 
+neighborhoodinfo %<>% rename(lat.x = lat, lon.x = lon)
 formap <- cbind(neighborhoodinfo, gc)
 formap %<>% rename(percent_positive = percentpositivity_7day)
 
